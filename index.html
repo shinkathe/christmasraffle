@@ -130,9 +130,8 @@ Janne, Priya"></textarea>
 
   function parseGroupedNames(input) {
     // Returns { names: [..], groupOf: Int32Array }
-    const lines = input.split(/
-?
-/).map(l => l.trim()).filter(Boolean);
+    const lines = input.split("\n").map(l => l.trim()).filter(Boolean);
+    console.log(lines);
     const names = [];
     const groupOf = [];
     const seen = new Set();
