@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Secret Santa – Link Generator & Viewer</title>
+  <style>
+    :root {
+      --bg: #0f172a;         /* slate-900 */
+      --panel: #111827;      /* gray-900 */
+      --muted: #94a3b8;      /* slate-400 */
+      --text: #e5e7eb;       /* gray-200 */
+      --accent: #60a5fa;     /* blue-400 */
+      --accent-2: #34d399;   /* emerald-400 */
+      --warn: #f59e0b;       /* amber-500 */
+      --danger: #ef4444;     /* red-500 */
+      --border: #1f2937;     /* gray-800 */
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: linear-gradient(180deg, #0b1220, var(--bg));
+      color: var(--text);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    .container { max-width: 980px; margin: 0 auto; padding: 24px; }
+    .card { background: rgba(17,24,39,.65); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.25); backdrop-filter: blur(6px); }
+    h1 { font-size: 28px; letter-spacing: .3px; margin: 0 0 8px; }
+    p.lead { color: var(--muted); margin-top: 0; }
+    textarea, input[type="text"], input[type="password"] {
+      width: 100%; padding: 12px 14px; border-radius: 12px; background: #0b1020; color: var(--text);
+      border: 1px solid var(--border); outline: none; font-size: 14px; resize: vertical; min-height: 120px;
+    }
+    textarea::placeholder { color: #6b7280; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .row.two { grid-template-columns: 1fr 1fr; }
+    .btn { appearance: none; border: 1px solid var(--border); background: #101a33; color: var(--text);
+      padding: 10px 14px; border-radius: 12px; cursor: pointer; font-weight: 600; transition: transform .02s ease, background .2s ease, border-color .2s ease;
+    }
+    .btn:hover { background: #132044; border-color: #223355; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: #10223a; border-color: #28579c; }
+    .btn.primary:hover { background: #0f2b52; }
+    .btn.success { background: #0d2b22; border-color: #1f7a5a; }
+    .btn.link { background: transparent; border-color: transparent; color: var(--accent); padding: 0; }
+    .hint { color: var(--muted); font-size: 13px; }
+    .list { margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 12px; }
+    code.kbd { background: #0b1020; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #0b1020; border: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+    .table { width: 100%; border-collapse: collapse; }
+    .table th, .table td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: left; font-size: 14px; }
+    .table th { color: var(--muted); font-weight: 600; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .center { text-align: center; }
+    .hidden { display: none; }
+    .pill { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border); background: #0b1020; color: var(--muted); font-size: 12px; }
+    .footer { margin-top: 20px; color: var(--muted); font-size: 12px; }
+    .inline { display: inline-flex; gap: 10px; align-items: center; }
+    .success-text { color: var(--accent-2); }
+    .warning-text { color: var(--warn); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="mode-generator" class="card">
+      <h1>Secret Santa – Generator</h1>
+      <p class="lead">Paste names (one per line), generate unique, opaque links for each participant. Opening a link reveals exactly one assignment. All in-browser – no servers, no storage.</p>
+
+      <div class="row">
+        <div>
+          <label for="names"><strong>Names</strong> <span class="hint">(one per line)</span></label>
+          <textarea id="names" placeholder="Alice\nBob\nCharlie\nDiana\nEero\nFatima\nGita"></textarea>
+        </div>
+      </div>
+
+      <div class="row two">
+        <div>
+          <button id="btnGenerate" class="btn primary">Generate Assignments & Links</button>
+        </div>
+        <div class="inline">
+          <span class="badge">AES‑GCM 256‑bit</span>
+          <span class="hint">Links are opaque; anyone with a link can view their assignment.</span>
+        </div>
+      </div>
+
+      <div id="results" class="list hidden">
+        <div class="row two" style="align-items:center;">
+          <div><strong>Share these unique links</strong> <span class="hint">(one per person)</span></div>
+          <div class="inline" style="justify-content:flex-end;">
+            <button id="btnCopyAll" class="btn success">Copy All</button>
+            <button id="btnDownloadCsv" class="btn">Download CSV</button>
+          </div>
+        </div>
+        <table class="table" id="linksTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Unique Link</th>
+              <th class="center">Copy</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="footer">
+          <p>Tip: Send each person <em>their</em> link only. If you need stronger privacy (e.g., links should be useless without a passphrase), consider sharing a common passphrase out-of-band and modify this page to derive the key from it. This file is self-contained and can be emailed or hosted anywhere.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="mode-viewer" class="card hidden">
+      <h1>Secret Santa – Your Draw</h1>
+      <p id="viewerStatus" class="lead">Decrypting…</p>
+      <div id="viewerCard" class="hidden">
+        <p class="lead">Hello <strong id="viewerSelf"></strong>! 🎁</p>
+        <p class="lead">You are gifting to → <span class="success-text mono" id="viewerTarget"></span></p>
+        <p class="hint">Keep it secret. Have fun! ✨</p>
+        <p><a class="btn link" href="./">Create your own raffle</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ----- Utilities -----
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  function parseNames(input) {
+    return input
+      .split(/\r?\n/)         // split lines
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter((v, i, a) => a.indexOf(v) === i); // dedupe, keep first occurrence
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function derangement(names, maxAttempts = 2000) {
+    // Returns an array "assigned" where assigned[i] !== names[i] for all i
+    // and it's a permutation of names.
+    if (names.length < 2) return null; // impossible for 0 or 1
+    if (names.length === 2) {
+      if (names[0] === names[1]) return null; // duplicate-only case
+      return [names[1], names[0]]; // swap
+    }
+    for (let k = 0; k < maxAttempts; k++) {
+      const s = shuffle(names);
+      let ok = true;
+      for (let i = 0; i < names.length; i++) if (s[i] === names[i]) { ok = false; break; }
+      if (ok) return s;
+    }
+    return null; // give up (pathological cases)
+  }
+
+  // Base64URL helpers for ArrayBuffers
+  function bufToB64Url(buf) {
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+    return b64;
+  }
+  function b64UrlToBuf(b64url) {
+    const b64 = b64url.replaceAll("-", "+").replaceAll("_", "/");
+    const pad = b64.length % 4 === 0 ? 0 : 4 - (b64.length % 4);
+    const b64p = b64 + "=".repeat(pad);
+    const bin = atob(b64p);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  async function encryptJson(obj) {
+    const plain = new TextEncoder().encode(JSON.stringify(obj));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const rawKey = crypto.getRandomValues(new Uint8Array(32));
+    const key = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["encrypt"]);
+    const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain);
+    return {
+      iv: bufToB64Url(iv),
+      cipher: bufToB64Url(cipher),
+      key: bufToB64Url(rawKey)
+    };
+  }
+
+  async function decryptJson(ivB64, cipherB64, keyB64) {
+    const iv = new Uint8Array(b64UrlToBuf(ivB64));
+    const keyRaw = b64UrlToBuf(keyB64);
+    const key = await crypto.subtle.importKey("raw", keyRaw, { name: "AES-GCM" }, false, ["decrypt"]);
+    try {
+      const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, b64UrlToBuf(cipherB64));
+      return JSON.parse(new TextDecoder().decode(plainBuf));
+    } catch (e) {
+      throw new Error("Decryption failed. Link may be corrupted or incomplete.");
+    }
+  }
+
+  function buildLink(params) {
+    const url = new URL(window.location.href);
+    url.search = ""; // drop existing params
+    url.hash = "";
+    url.searchParams.set("iv", params.iv);
+    url.searchParams.set("c", params.cipher);
+    url.searchParams.set("k", params.key);
+    return url.toString();
+  }
+
+  function renderLinks(names, assigned, packages) {
+    const tbody = $("#linksTable tbody");
+    tbody.innerHTML = "";
+    const rows = [];
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
+      const link = buildLink(packages[i]);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td class="mono">${escapeHtml(name)}</td>
+        <td style="max-width:0;">
+          <input type="text" class="mono" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--border); background:#0b1020; color:var(--text);" value="${link}" readonly>
+        </td>
+        <td class="center"><button class="btn" data-copy>Copy</button></td>
+      `;
+      tbody.appendChild(tr);
+      rows.push({ idx: i + 1, name, link });
+    }
+
+    // Row copy buttons
+    $$('button[data-copy]').forEach((btn, idx) => {
+      btn.addEventListener('click', async () => {
+        const inp = btn.closest('tr').querySelector('input');
+        inp.select();
+        inp.setSelectionRange(0, inp.value.length);
+        try { await navigator.clipboard.writeText(inp.value); btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1200); }
+        catch { /* fallback */ document.execCommand('copy'); }
+      });
+    });
+
+    // Copy all
+    $('#btnCopyAll').onclick = async () => {
+      const txt = rows.map(r => `${r.idx}. ${r.name}: ${r.link}`).join('\n');
+      try { await navigator.clipboard.writeText(txt); flashStatus('#btnCopyAll', 'Copied all!'); }
+      catch { /* ignore */ }
+    };
+
+    // Download CSV
+    $('#btnDownloadCsv').onclick = () => {
+      const csv = ["Index,Name,Link"].concat(rows.map(r => `${r.idx},"${r.name.replaceAll('"','""')}","${r.link}"`)).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'secret-santa-links.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    };
+  }
+
+  function flashStatus(selBtn, text) {
+    const btn = document.querySelector(selBtn);
+    const old = btn.textContent;
+    btn.textContent = text;
+    setTimeout(() => btn.textContent = old, 1400);
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[ch]));
+  }
+
+  // ----- Generator flow -----
+  $('#btnGenerate').addEventListener('click', async () => {
+    const names = parseNames($('#names').value);
+    if (names.length < 2) {
+      alert('Please provide at least 2 unique names.');
+      return;
+    }
+
+    const assigned = derangement(names);
+    if (!assigned) {
+      alert('Could not create a valid draw. Try adjusting names.');
+      return;
+    }
+
+    // Build encrypted packages per participant
+    const pkgs = await Promise.all(names.map(async (selfName, i) => {
+      const payload = { self: selfName, target: assigned[i], ts: new Date().toISOString() };
+      const enc = await encryptJson(payload);
+      return enc;
+    }));
+
+    renderLinks(names, assigned, pkgs);
+    $('#results').classList.remove('hidden');
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  });
+
+  // ----- Viewer flow (when opened via link) -----
+  async function tryViewerMode() {
+    const url = new URL(window.location.href);
+    const iv = url.searchParams.get('iv');
+    const c  = url.searchParams.get('c');
+    const k  = url.searchParams.get('k');
+    if (iv && c && k) {
+      $('#mode-generator').classList.add('hidden');
+      $('#mode-viewer').classList.remove('hidden');
+      try {
+        const obj = await decryptJson(iv, c, k);
+        $('#viewerSelf').textContent = obj.self;
+        $('#viewerTarget').textContent = obj.target;
+        $('#viewerStatus').innerHTML = '<span class="success-text">Decryption success.</span>';
+        $('#viewerCard').classList.remove('hidden');
+      } catch (err) {
+        $('#viewerStatus').innerHTML = `<span class="warning-text">${escapeHtml(err.message)}</span>`;
+      }
+    }
+  }
+
+  tryViewerMode();
+  </script>
+</body>
+</html>
