@@ -64,12 +64,15 @@
   <div class="container">
     <div id="mode-generator" class="card">
       <h1>Secret Santa – Generator</h1>
-      <p class="lead">Paste names (one per line), generate unique, opaque links for each participant. Opening a link reveals exactly one assignment. All in-browser – no servers, no storage.</p>
+      <p class="lead">Paste names grouped by lines (use commas to group people who <em>must not</em> gift to each other). Generates unique, opaque links; each link reveals one assignment. All in-browser – no servers, no storage.</p>
 
       <div class="row">
         <div>
-          <label for="names"><strong>Names</strong> <span class="hint">(one per line)</span></label>
-          <textarea id="names" placeholder="Alice\nBob\nCharlie\nDiana\nEero\nFatima\nGita"></textarea>
+          <label for="names"><strong>Names / Groups</strong> <span class="hint">(comma = same group, newline = next group)</span></label>
+          <textarea id="names" placeholder="Lari, Ella
+Taina, Mika
+Sofia
+Janne, Priya"></textarea>
         </div>
       </div>
 
@@ -125,12 +128,134 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  function parseNames(input) {
-    return input
-      .split(/\r?\n/)         // split lines
-      .map(s => s.trim())
-      .filter(Boolean)
-      .filter((v, i, a) => a.indexOf(v) === i); // dedupe, keep first occurrence
+  function parseGroupedNames(input) {
+    // Returns { names: [..], groupOf: Int32Array }
+    const lines = input.split(/
+?
+/).map(l => l.trim()).filter(Boolean);
+    const names = [];
+    const groupOf = [];
+    const seen = new Set();
+    let gid = 0;
+    for (const line of lines) {
+      const members = line.split(',').map(s => s.trim()).filter(Boolean);
+      if (members.length === 0) continue;
+      for (const m of members) {
+        const key = m.toLowerCase();
+        if (seen.has(key)) continue; // dedupe across all groups
+        seen.add(key);
+        names.push(m);
+        groupOf.push(gid);
+      }
+      gid++;
+    }
+    return { names, groupOf: Int32Array.from(groupOf) };
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  // Build adjacency where giver i can gift to recipient j (not self, not same group)
+  function buildGraph(n, groupOf) {
+    const adj = Array.from({ length: n }, () => []);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        if (groupOf[i] === groupOf[j]) continue;
+        adj[i].push(j);
+      }
+    }
+    return adj;
+  }
+
+  // Hopcroft–Karp for maximum bipartite matching (Left: givers, Right: recipients)
+  function hopcroftKarp(adj, nLeft, nRight) {
+    const INF = 1 << 30;
+    const pairU = new Int32Array(nLeft).fill(-1); // u -> v
+    const pairV = new Int32Array(nRight).fill(-1); // v -> u
+    const dist = new Int32Array(nLeft);
+
+    function bfs() {
+      const q = [];
+      for (let u = 0; u < nLeft; u++) {
+        if (pairU[u] === -1) { dist[u] = 0; q.push(u); }
+        else dist[u] = INF;
+      }
+      let foundFree = false;
+      while (q.length) {
+        const u = q.shift();
+        for (const v of adj[u]) {
+          const pu = pairV[v];
+          if (pu !== -1 && dist[pu] === INF) {
+            dist[pu] = dist[u] + 1;
+            q.push(pu);
+          }
+          if (pu === -1) foundFree = true;
+        }
+      }
+      return foundFree;
+    }
+
+    function dfs(u) {
+      for (const v of adj[u]) {
+        const pu = pairV[v];
+        if (pu === -1 || (dist[pu] === dist[u] + 1 && dfs(pu))) {
+          pairU[u] = v;
+          pairV[v] = u;
+          return true;
+        }
+      }
+      dist[u] = INF;
+      return false;
+    }
+
+    let matching = 0;
+    while (bfs()) {
+      for (let u = 0; u < nLeft; u++) if (pairU[u] === -1) if (dfs(u)) matching++;
+    }
+    return { matching, pairU, pairV };
+  }
+
+  function constrainedAssignment(names, groupOf) {
+    const n = names.length;
+    if (n < 2) return null;
+    // Quick impossibility checks: if any group contains everyone, impossible
+    const groups = new Map();
+    groupOf.forEach((g, i) => { if (!groups.has(g)) groups.set(g, 0); groups.set(g, groups.get(g) + 1); });
+    for (const size of groups.values()) if (size >= n) return null;
+
+    // Build and match
+    const adj = buildGraph(n, groupOf);
+    const { matching, pairU } = hopcroftKarp(adj, n, n);
+    if (matching !== n) return null; // no perfect matching under constraints
+    const assigned = Array.from(pairU); // index of recipient per giver
+    // Map recipient indices back to names
+    return assigned.map(j => names[j]);
+  }
+
+  function shuffleNamesToReduceBias(names, groupOf) {
+    // Randomly permute indices consistently for a fairer distribution
+    const idx = names.map((_, i) => i);
+    const perm = shuffle(idx);
+    const names2 = perm.map(i => names[i]);
+    const grp2 = Int32Array.from(perm.map(i => groupOf[i]));
+    return { names2, grp2, perm };
+  }
+
+  function unpermuteAssignment(assignedNames, perm) {
+    // assignedNames[i] corresponds to permuted giver i; map back to original order
+    const result = Array(assignedNames.length);
+    for (let i = 0; i < perm.length; i++) {
+      const originalIndex = perm[i];
+      result[originalIndex] = assignedNames[i];
+    }
+    return result;
   }
 
   function shuffle(arr) {
@@ -274,17 +399,20 @@
 
   // ----- Generator flow -----
   $('#btnGenerate').addEventListener('click', async () => {
-    const names = parseNames($('#names').value);
+    const { names, groupOf } = parseGroupedNames($('#names').value);
     if (names.length < 2) {
-      alert('Please provide at least 2 unique names.');
+      alert('Please provide at least 2 names. Use commas to group people who must not gift each other.');
       return;
     }
 
-    const assigned = derangement(names);
-    if (!assigned) {
-      alert('Could not create a valid draw. Try adjusting names.');
+    // Randomize input to reduce structural bias in matching, then unpermute after
+    const { names2, grp2, perm } = shuffleNamesToReduceBias(names, groupOf);
+    const assignedPerm = constrainedAssignment(names2, grp2);
+    if (!assignedPerm) {
+      alert('Could not create a valid draw with the given group constraints. Try adjusting group sizes.');
       return;
     }
+    const assigned = unpermuteAssignment(assignedPerm, perm);
 
     // Build encrypted packages per participant
     const pkgs = await Promise.all(names.map(async (selfName, i) => {
