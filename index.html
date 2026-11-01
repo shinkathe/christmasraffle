@@ -74,6 +74,14 @@ Janne, Priya"></textarea>
         </div>
       </div>
 
+      <div class="row">
+        <div>
+          <label for="previousPairs"><strong>Previous-year pairings</strong> <span class="hint">(optional; one pair per line, separated by a comma; blocked in either direction)</span></label>
+          <textarea id="previousPairs" placeholder="Sofia, Janne
+Priya, Alex"></textarea>
+        </div>
+      </div>
+
       <div class="row two">
         <div>
           <button id="btnGenerate" class="btn primary">Generate Assignments & Links</button>
@@ -159,12 +167,13 @@ Janne, Priya"></textarea>
   }
 
   // Build adjacency where giver i can gift to recipient j (not self, not same group)
-  function buildGraph(n, groupOf) {
+  function buildGraph(n, groupOf, forbiddenPairs = []) {
     const adj = Array.from({ length: n }, () => []);
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         if (i === j) continue;
         if (groupOf[i] === groupOf[j]) continue;
+        if (forbiddenPairs.some(([a, b]) => (a === i && b === j) || (a === j && b === i))) continue;
         adj[i].push(j);
       }
     }
@@ -219,7 +228,7 @@ Janne, Priya"></textarea>
     return { matching, pairU, pairV };
   }
 
-  function constrainedAssignment(names, groupOf) {
+  function constrainedAssignment(names, groupOf, forbiddenPairs = []) {
     const n = names.length;
     if (n < 2) return null;
     // Quick impossibility checks: if any group contains everyone, impossible
@@ -228,7 +237,7 @@ Janne, Priya"></textarea>
     for (const size of groups.values()) if (size >= n) return null;
 
     // Build and match
-    const adj = buildGraph(n, groupOf);
+    const adj = buildGraph(n, groupOf, forbiddenPairs);
     const { matching, pairU } = hopcroftKarp(adj, n, n);
     if (matching !== n) return null; // no perfect matching under constraints
     const assigned = Array.from(pairU); // index of recipient per giver
@@ -394,6 +403,27 @@ Janne, Priya"></textarea>
     return str.replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[ch]));
   }
 
+  function parsePreviousPairs(input, names) {
+    const nameIndices = new Map(names.map((name, index) => [name.toLowerCase(), index]));
+    const pairs = [];
+    const lines = input.split("\n").map(line => line.trim()).filter(Boolean);
+    for (let index = 0; index < lines.length; index++) {
+      const members = lines[index].split(',').map(name => name.trim());
+      if (members.length !== 2 || members.some(name => !name)) {
+        return { pairs: [], error: `Previous-year pairing on line ${index + 1} must contain exactly two names separated by a comma.` };
+      }
+      const [giver, recipient] = members.map(name => nameIndices.get(name.toLowerCase()));
+      if (giver === undefined || recipient === undefined) {
+        return { pairs: [], error: `Both names in previous-year pairing on line ${index + 1} must appear in Names / Groups.` };
+      }
+      if (giver === recipient) {
+        return { pairs: [], error: `Previous-year pairing on line ${index + 1} must contain two different people.` };
+      }
+      pairs.push([giver, recipient]);
+    }
+    return { pairs, error: null };
+  }
+
   // ----- Generator flow -----
   $('#btnGenerate').addEventListener('click', async () => {
     const { names, groupOf } = parseGroupedNames($('#names').value);
@@ -402,9 +432,16 @@ Janne, Priya"></textarea>
       return;
     }
 
+    const { pairs: previousPairs, error } = parsePreviousPairs($('#previousPairs').value, names);
+    if (error) {
+      alert(error);
+      return;
+    }
+
     // Randomize input to reduce structural bias in matching, then unpermute after
     const { names2, grp2, perm } = shuffleNamesToReduceBias(names, groupOf);
-    const assignedPerm = constrainedAssignment(names2, grp2);
+    const remappedPairs = previousPairs.map(([giver, recipient]) => [perm.indexOf(giver), perm.indexOf(recipient)]);
+    const assignedPerm = constrainedAssignment(names2, grp2, remappedPairs);
     if (!assignedPerm) {
       alert('Could not create a valid draw with the given group constraints. Try adjusting group sizes.');
       return;
