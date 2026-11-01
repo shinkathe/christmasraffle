@@ -76,7 +76,7 @@ Janne, Priya"></textarea>
 
       <div class="row">
         <div>
-          <label for="previousPairs"><strong>Previous-year pairings</strong> <span class="hint">(optional; one pair per line, separated by a comma; blocked in either direction)</span></label>
+          <label for="previousPairs"><strong>Previous-year pairings</strong> <span class="hint">(optional; one giver, recipient pair per line, separated by a comma)</span></label>
           <textarea id="previousPairs" placeholder="Sofia, Janne
 Priya, Alex"></textarea>
         </div>
@@ -173,7 +173,7 @@ Priya, Alex"></textarea>
       for (let j = 0; j < n; j++) {
         if (i === j) continue;
         if (groupOf[i] === groupOf[j]) continue;
-        if (forbiddenPairs.some(([a, b]) => (a === i && b === j) || (a === j && b === i))) continue;
+        if (forbiddenPairs.some(([giver, recipient]) => giver === i && recipient === j)) continue;
         adj[i].push(j);
       }
     }
